@@ -1,0 +1,97 @@
+#!/usr/bin/php
+<?php
+
+define('BR', "\n");
+
+//quick checks.
+if(!file_exists($argv[1])) exit('! missing show list json file'.BR);
+if(!is_dir($argv[2])) exit('! missing torrent output path or is not a directory'.BR);
+
+$histFile = (file_exists($argv[3]) ? $argv[3] : '/tmp/torFetchTVhist.log' );
+
+$output = rtrim($argv[2], '/');
+$showlist = json_decode(file_get_contents($argv[1]), true);
+$history = explode("\n", @file_get_contents($histFile));
+
+foreach ($showlist as $value) {
+	print_r(returnMagnets($value));
+}
+
+echo "complete".BR;
+
+//fetch magnet links from given page
+function returnMagnets($show) {
+	// check days to scan
+	if((!in_array(getDay($show['timezone']), $show['scanDays']))&&(!in_array('All', $show['scanDays']))) return false;
+
+	// build exclude list of shows already in series path
+	$exists = fillArrayWithFileNodes(new DirectoryIterator( trim($show['seriesPath']) ));
+
+	$feed = inflate(file_get_contents(trim($show['seriesMagnetLinks'])));
+	preg_match_all('!(magnet:.+?)(?:]|")!', $feed, $m);
+	$found = $m[1];
+
+	foreach ($found as $key => $value) {
+		if(preg_match('!&dn=(.+?)&!', $value, $m)) {
+			$name = $m[1];
+		}
+		//only look for formatted stuff
+		if(!preg_match('!\.(S[0-9]{2}E[0-9]{2})\.!', $name, $seM)) { unset($found[$key]); continue; };
+		if(in_array(strtoupper($seM[1]), $exists)) { unset($found[$key]); continue; };
+
+		//kill items that match excludes
+		if(preg_match('!'.implode('|', $show['exclude']).'!i', $name)) { unset($found[$key]); continue; };
+
+		//kill items that dont match includes
+		if(!preg_match('!'.implode('|', $show['include']).'!i', $name)) { unset($found[$key]); continue; };
+
+		if(in_array(strtolower($name), $history)) { unset($found[$key]); continue; };
+	}
+	return $found;
+}
+
+//base magnet link, [array of trackers to add], returns array [file: 'filename', content: 'torrent contents'], or fails with false;
+function buildMagnetLink($base, $trackers = false) {
+	$ml[] = 'd10:magnet-uri251:magnet:?';
+	preg_match('!xt=([^&/]+)!', $base, $m);
+	$ml[] = 'xt='.$m[1];
+
+	if(preg_match('!dn=([^&/]+)!', $base, $m)){
+		$ml[] = 'dn='.$m[1];
+		$name = $m[1];
+	}
+	
+	preg_match_all('!tr=(.*?)(?:&|$)!', $base, $m);
+	$tr = $m[1];
+	if(is_array($trackers))
+		$tr = array_merge($tr,$trackers);
+	$ml[] = 'tr='.implode('&tr=', $tr);
+	return ['file'=> $name.'.torrent', 'contents'=> implode('&', $ml).'e'];
+}
+
+//inflate gzip http returns
+function inflate($data){ $g=tempnam('/tmp','ff'); @file_put_contents($g,$data); ob_start(); readgzfile($g); $d=ob_get_clean(); return $d; }
+
+
+//scanning dirs
+function fillArrayWithFileNodes( DirectoryIterator $dir ) {
+  $data = array();
+  foreach ($dir as $node){
+    if ( $node->isDir() && !$node->isDot() ) {
+      $data = array_merge($data, fillArrayWithFileNodes(new DirectoryIterator( $node->getPathname())));
+    }else if ( $node->isFile() ) {
+    	if(preg_match('!S[0-9]{2}E[0-9]{2}!i', $node->getFilename(), $m))
+      	$data[] = strtoupper($m[0]);
+    }
+  }
+  return $data;
+}
+
+// time zone jumps
+function getDay($tz) {
+  $udtz = new DateTimeZone($tz);
+  $udt = new DateTime("now", $udtz);
+  $offset = $udt->getOffset(); 
+  return gmdate("D", time() + $offset);
+}
+?>

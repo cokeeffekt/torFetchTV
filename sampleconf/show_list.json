@@ -1,0 +1,15 @@
+[{
+	"seriesMagnetLinks": "https://eztv.it/shows/525/revenge/",
+	"seriesPath": "dump",
+	"scanDays": ["All"],
+	"exclude": ["720p"],
+	"include": [],
+	"timezone": "America/Los_Angeles"
+},{
+	"seriesMagnetLinks": "https://eztv.it/shows/92/family-guy/",
+	"seriesPath": "dump",
+	"scanDays": ["All"],
+	"exclude": ["720p"],
+	"include": [],
+	"timezone": "America/Los_Angeles"
+}]
