@@ -14,13 +14,23 @@ $showlist = json_decode(file_get_contents($argv[1]), true);
 $history = explode("\n", @file_get_contents($histFile));
 
 foreach ($showlist as $value) {
-	print_r(returnMagnets($value));
+	$mLinks = returnMagnets($value);
+
+	if(is_array($mLinks)){
+		foreach ($mLinks as $ml) {
+			$tf = buildMagnetLink($ml);
+			if(in_array($tf['file'], $history)) continue;
+			file_put_contents($output.'/'.$tf['file'], $tf['contents']);
+			$history[] = $tf['file'];
+		}
+	}
 }
 
-echo "complete".BR;
+file_put_contents($histFile, implode(BR, $history));
 
 //fetch magnet links from given page
 function returnMagnets($show) {
+	$thisHistory = [];
 	// check days to scan
 	if((!in_array(getDay($show['timezone']), $show['scanDays']))&&(!in_array('All', $show['scanDays']))) return false;
 
@@ -38,14 +48,13 @@ function returnMagnets($show) {
 		//only look for formatted stuff
 		if(!preg_match('!\.(S[0-9]{2}E[0-9]{2})\.!', $name, $seM)) { unset($found[$key]); continue; };
 		if(in_array(strtoupper($seM[1]), $exists)) { unset($found[$key]); continue; };
-
+		if(in_array(strtoupper($seM[1]), $thisHistory)) { unset($found[$key]); continue; };
 		//kill items that match excludes
 		if(preg_match('!'.implode('|', $show['exclude']).'!i', $name)) { unset($found[$key]); continue; };
 
 		//kill items that dont match includes
 		if(!preg_match('!'.implode('|', $show['include']).'!i', $name)) { unset($found[$key]); continue; };
-
-		if(in_array(strtolower($name), $history)) { unset($found[$key]); continue; };
+		$thisHistory[] = strtoupper($seM[1]);
 	}
 	return $found;
 }
